@@ -11,7 +11,9 @@ from .mappers_config import (
     ResolutionResizeMapperConfig,
 )
 import numpy as np
+import torch
 import torch.nn.functional as F
+from torchvision.transforms import InterpolationMode
 
 
 class KeyRenameMapper(BaseMapper):
@@ -199,7 +201,7 @@ class ResolutionResizeMapper(BaseMapper):
 
     def __init__(self, config: ResolutionResizeMapperConfig):
         super().__init__(config)
-        self.interpolation = getattr(InterpolationMode, config.interpolation) if isinstance(config.interpolation, str) else config.interpolation
+        self.interpolation = getattr(InterpolationMode, config.interpolation.upper()) if isinstance(config.interpolation, str) else config.interpolation
 
     def __call__(self, batch: Dict[str, Any], *args, **kwargs) -> Dict[str, Any]:
         if "target_h" not in batch or "target_w" not in batch:

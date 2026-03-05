@@ -28,6 +28,7 @@ from lbm.data.datasets import DataModule, DataModuleConfig
 from lbm.data.filters import KeyFilter, KeyFilterConfig
 from lbm.data.mappers import (
     BaseMapper,
+    KeyRenameMapper,
     KeyRenameMapperConfig,
     MapperWrapper,
     RescaleMapper,
@@ -82,8 +83,12 @@ class MaskingMapper(BaseMapper):
         mask = batch[self.mask_key]   # (1, H, W) Tensor
 
         # Augment mask if training
-        # We assume image is normalized to [-1, 1] and mask is [0, 1]
-        mask_np = mask.squeeze().cpu().numpy() # (H, W)
+        # We assume image is normalized to [0, 1] and mask is [0, 1]
+        mask_np = mask.squeeze().cpu().numpy() # Try squeezing
+        if mask_np.ndim == 3: # If still (C, H, W) where C > 1
+             mask_np = mask_np[0]
+        elif mask_np.ndim == 4: # If (B, C, H, W)
+             mask_np = mask_np[0, 0]
         
         # 1. Random Dilation
         if random.random() < self.config.dilation_prob:
@@ -338,6 +343,17 @@ def get_filter_mappers(use_bucketing: bool = False):
                 ResolutionResizeMapperConfig(key="mask", output_key="mask", interpolation="nearest")
             )
         )
+        # Convert to Tensors
+        for key in ["image", "target", "mask"]:
+            mappers.append(
+                TorchvisionMapper(
+                    TorchvisionMapperConfig(
+                        key=key,
+                        transforms=["ToTensor"],
+                        transforms_kwargs=[{}],
+                    )
+                )
+            )
     else:
         # Fixed 1024x1024
         for key, interp in [("image", InterpolationMode.BILINEAR), ("target", InterpolationMode.BILINEAR), ("mask", InterpolationMode.NEAREST_EXACT)]:
@@ -474,6 +490,7 @@ def main(
     bridge_noise_sigma: float = 0.05,
     save_interval: int = 1000,
     path_config: str = None,
+    config_yaml: dict = {},
     use_bucketing: bool = False,
     mixing_probabilities: Optional[List[float]] = None,
 ):
@@ -556,11 +573,11 @@ def main(
     training_signature = (
         datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         + "-LBM-Removal"
-        + f"{os.environ['SLURM_JOB_ID']}"
+        + f"{os.environ.get('SLURM_JOB_ID', 'local')}"
         + f"_{os.environ.get('SLURM_ARRAY_TASK_ID', 0)}"
     )
     dir_path = f"{save_ckpt_path}/logs/{training_signature}"
-    if os.environ["SLURM_PROCID"] == "0":
+    if os.environ.get("SLURM_PROCID", "0") == "0":
         os.makedirs(dir_path, exist_ok=True)
         if path_config is not None:
             shutil.copy(path_config, f"{save_ckpt_path}/config.yaml")
@@ -599,8 +616,8 @@ def main(
 
     trainer = Trainer(
         accelerator="gpu",
-        devices=int(os.environ["SLURM_NPROCS"]) // int(os.environ["SLURM_NNODES"]),
-        num_nodes=int(os.environ["SLURM_NNODES"]),
+        devices=int(os.environ.get("SLURM_NPROCS", 1)) // int(os.environ.get("SLURM_NNODES", 1)),
+        num_nodes=int(os.environ.get("SLURM_NNODES", 1)),
         strategy=strategy,
         default_root_dir="logs",
         logger=loggers.WandbLogger(

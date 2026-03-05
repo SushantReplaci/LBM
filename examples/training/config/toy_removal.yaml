@@ -17,12 +17,12 @@ use_bucketing: true
 # SHARDS_PATH_OR_URLS
 # Using the toy set created by the user
 train_shards:
-  - "pipe:cat /home/replaci/Documents/ComputerVision/Dataset/NaveenData/TOY_SET/shard-*.tar"
+  - "pipe:cat /home/ubuntu/Documents/LBM/data/toy_data_lbm/shard-*.tar"
 
 validation_shards:
-  - "pipe:cat /home/replaci/Documents/ComputerVision/Dataset/NaveenData/TOY_SET/shard-000000.tar"
+  - "pipe:cat /home/ubuntu/Documents/LBM/data/toy_data_lbm/shard-000000.tar"
 
-batch_size: 2
+batch_size: 1
 learning_rate: 3e-5
 optimizer: AdamW
 num_steps: [1, 4]

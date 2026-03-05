@@ -38,12 +38,12 @@ class DataModuleConfig(BaseConfig):
     
     # Bucketing parameters
     use_bucketing: bool = False
-    budgets: List[int] = None
-    probabilities: List[float] = None
-    base_batch_sizes: List[int] = None
+    budgets: Optional[List[int]] = None
+    probabilities: Optional[List[float]] = None
+    base_batch_sizes: Optional[List[int]] = None
     
     # Dataset mixing
-    mixing_probabilities: List[float] = None
+    mixing_probabilities: Optional[List[float]] = None
 
     def __post_init__(self):
         super().__post_init__()

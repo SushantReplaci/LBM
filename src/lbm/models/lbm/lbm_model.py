@@ -374,7 +374,7 @@ class LBMModel(BaseModel):
         sigmas = scheduler.sigmas.to(device=device, dtype=dtype)
         schedule_timesteps = scheduler.timesteps.to(device)
         timesteps = timesteps.to(device)
-        step_indices = [(schedule_timesteps == t).nonzero().item() for t in timesteps]
+        step_indices = [torch.abs(schedule_timesteps - t).argmin().item() for t in timesteps]
 
         sigma = sigmas[step_indices].flatten()
         while len(sigma.shape) < n_dim:
