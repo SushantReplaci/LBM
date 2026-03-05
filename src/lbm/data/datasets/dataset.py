@@ -8,6 +8,7 @@ from ..filters import BaseFilter, FilterWrapper
 from ..mappers import BaseMapper, MapperWrapper
 from .collation_fn import custom_collation_fn
 from .datasets_config import DataModuleConfig
+from .dataset_utils import BucketBatcher, get_resolution_to_batch_size_map
 
 
 class DataPipeline:
@@ -101,16 +102,32 @@ class DataPipeline:
                     handler=self.config.handler,
                 )
             )
-        # split by worker
-        pipeline.extend(
-            [
-                wds.split_by_worker,
-                wds.tarfile_to_samples(
-                    handler=self.config.handler,
-                    rename_files=self.config.rename_files_fn,
-                ),
-            ]
-        )
+        # load samples
+        if isinstance(self.shards_path_or_urls[0], list) and self.config.mixing_probabilities:
+            # Multi-dataset mixing
+            pipelines = []
+            for shard_list in self.shards_path_or_urls:
+                pipelines.append(wds.DataPipeline(
+                    wds.SimpleShardList(shard_list),
+                    wds.split_by_node,
+                    wds.split_by_worker,
+                    wds.tarfile_to_samples(
+                        handler=self.config.handler,
+                        rename_files=self.config.rename_files_fn,
+                    ),
+                ))
+            pipeline.append(wds.RandomMix(pipelines, probs=self.config.mixing_probabilities))
+        else:
+            # Single dataset
+            pipeline.extend(
+                [
+                    wds.split_by_worker,
+                    wds.tarfile_to_samples(
+                        handler=self.config.handler,
+                        rename_files=self.config.rename_files_fn,
+                    ),
+                ]
+            )
 
         # shuffle before filter mappers
         if self.config.shuffle_before_filter_mappers_buffer_size is not None:
@@ -134,12 +151,23 @@ class DataPipeline:
             )
 
         # batching
-        pipeline.append(
-            wds.batched(
-                self.config.per_worker_batch_size,
-                collation_fn=custom_collation_fn,
+        if self.config.use_bucketing:
+            res_to_bs = get_resolution_to_batch_size_map(
+                self.config.budgets, 
+                self.config.base_batch_sizes
             )
-        )
+            pipeline.append(BucketBatcher(
+                resolution_to_batch_size=res_to_bs,
+                collation_fn=custom_collation_fn,
+                default_batch_size=self.config.per_worker_batch_size
+            ))
+        else:
+            pipeline.append(
+                wds.batched(
+                    self.config.per_worker_batch_size,
+                    collation_fn=custom_collation_fn,
+                )
+            )
 
         # apply batched transforms
         pipeline.extend(

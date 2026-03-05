@@ -107,3 +107,30 @@ class RescaleMapperConfig(BaseMapperConfig):
     """
 
     key: str = "image"
+
+
+@dataclass
+class ResolutionBucketMapperConfig(BaseMapperConfig):
+    """
+    Configuration for the ResolutionBucketMapper.
+    """
+    budgets: List[int] = None
+    probabilities: List[float] = None
+    min_ar: float = 0.25
+    max_ar: float = 4.0
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.budgets is None:
+            self.budgets = [256**2, 512**2, 768**2, 1024**2]
+        if self.probabilities is None:
+            self.probabilities = [0.1, 0.2, 0.2, 0.5]
+        assert len(self.budgets) == len(self.probabilities)
+
+
+@dataclass
+class ResolutionResizeMapperConfig(BaseMapperConfig):
+    """
+    Configuration for the ResolutionResizeMapper.
+    """
+    interpolation: str = "bilinear"

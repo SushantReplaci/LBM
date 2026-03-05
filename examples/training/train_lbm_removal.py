@@ -10,8 +10,6 @@ import albumentations as A
 import cv2
 import numpy as np
 import braceexpand
-
-import braceexpand
 import fire
 import torch
 import yaml
@@ -29,6 +27,7 @@ from pydantic.dataclasses import dataclass
 from lbm.data.datasets import DataModule, DataModuleConfig
 from lbm.data.filters import KeyFilter, KeyFilterConfig
 from lbm.data.mappers import (
+    BaseMapper,
     KeyRenameMapperConfig,
     MapperWrapper,
     RescaleMapper,
@@ -90,13 +89,13 @@ class MaskingMapper(BaseMapper):
         if random.random() < self.config.dilation_prob:
             kernel_size = random.randint(*self.config.dilation_limit)
             kernel = np.ones((kernel_size, kernel_size), np.uint8)
-            mask_np = cv2.dilate(mask_np, kernel, iterations=1)
+            mask_np = cv2.dilate(mask_np.astype(np.uint8), kernel, iterations=1).astype(np.float32)
 
         # 2. Random Erosion
         if random.random() < self.config.erosion_prob:
             kernel_size = random.randint(*self.config.erosion_limit)
             kernel = np.ones((kernel_size, kernel_size), np.uint8)
-            mask_np = cv2.erode(mask_np, kernel, iterations=1)
+            mask_np = cv2.erode(mask_np.astype(np.uint8), kernel, iterations=1).astype(np.float32)
 
         # 3. Coarse Dropout (inside mask)
         if random.random() < self.config.dropout_prob:
@@ -104,11 +103,9 @@ class MaskingMapper(BaseMapper):
             # This forces the model to recover original pixels too
             h, w = mask_np.shape
             aug = A.CoarseDropout(
-                max_holes=8, 
-                max_height=self.config.dropout_hole_size, 
-                max_width=self.config.dropout_hole_size,
-                min_holes=1,
-                fill_value=0,
+                num_holes_range=(1, 8), 
+                hole_height_range=(1, self.config.dropout_hole_size), 
+                hole_width_range=(1, self.config.dropout_hole_size),
                 p=1.0
             )
             # Apply only to mask where it is 1

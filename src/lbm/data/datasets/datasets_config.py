@@ -25,7 +25,7 @@ class DataModuleConfig(BaseConfig):
         rename_files_fn (Optional[Callable[[str], str]]): A callable to rename the files. Defaults to None.
     """
 
-    shards_path_or_urls: Union[str, List[str]] = None
+    shards_path_or_urls: Union[str, List[str], List[List[str]]] = None
     per_worker_batch_size: int = 16
     num_workers: int = 1
     shuffle_before_split_by_node_buffer_size: Optional[int] = 100
@@ -35,6 +35,15 @@ class DataModuleConfig(BaseConfig):
     decoder: str = "pil"
     handler: Callable = wds.warn_and_continue
     rename_files_fn: Optional[Callable[[str], str]] = None
+    
+    # Bucketing parameters
+    use_bucketing: bool = False
+    budgets: List[int] = None
+    probabilities: List[float] = None
+    base_batch_sizes: List[int] = None
+    
+    # Dataset mixing
+    mixing_probabilities: List[float] = None
 
     def __post_init__(self):
         super().__post_init__()
