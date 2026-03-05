@@ -1,10 +1,11 @@
 import os
 import tarfile
 import argparse
+import random
 from tqdm import tqdm
 from pathlib import Path
 
-def create_webdataset_shards(input_dir, output_dir, shard_size=1000):
+def create_webdataset_shards(input_dir, output_dir, shard_size=1000, num_images=None):
     """
     Creates WebDataset (.tar) shards from a dataset with subfolders:
     - original/
@@ -42,6 +43,13 @@ def create_webdataset_shards(input_dir, output_dir, shard_size=1000):
     
     print(f"Found {len(samples)} complete triplets.")
     
+    if num_images is not None and num_images < len(samples):
+        print(f"Randomly selecting {num_images} images for toy data...")
+        random.shuffle(samples)
+        samples = samples[:num_images]
+    elif num_images is not None:
+        print(f"Requested {num_images} images, but only {len(samples)} are available. Using all.")
+    
     if not samples:
         print("No samples found. Exiting.")
         return
@@ -75,8 +83,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create WebDataset shards for LBM object removal training.")
     parser.add_argument("--input_dir", type=str, required=True, help="Path to root dir containing original, mask, edited folders.")
     parser.add_argument("--output_dir", type=str, required=True, help="Where to save .tar shards.")
-    parser.add_argument("--shard_size", type=int, default=1000, help="Number of samples per shard.")
+    parser.add_argument("--num_images", type=int, default=None, help="Number of images to randomly select (for toy data).")
     
     args = parser.parse_args()
     
-    create_webdataset_shards(args.input_dir, args.output_dir, args.shard_size)
+    create_webdataset_shards(args.input_dir, args.output_dir, args.num_images)

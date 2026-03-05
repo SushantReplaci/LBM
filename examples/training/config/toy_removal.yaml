@@ -1,0 +1,37 @@
+# wandb
+wandb_project: lbm-removal-toy
+timestep_sampling: custom_timesteps
+unet_input_channels: 4
+vae_num_channels: 4
+selected_timesteps: [0, 250, 500, 750]
+prob: [0.25, 0.25, 0.25, 0.25]
+pixel_loss_type: lpips # l1 l2
+pixel_loss_weight: 10.0
+latent_loss_type: l2 # l1 l2
+latent_loss_weight: 1.0
+bridge_noise_sigma: 0.05
+conditioning_images_keys: []
+conditioning_masks_keys: []
+use_bucketing: true
+
+# SHARDS_PATH_OR_URLS
+# Using the toy set created by the user
+train_shards:
+  - "pipe:cat /home/replaci/Documents/ComputerVision/Dataset/NaveenData/TOY_SET/shard-*.tar"
+
+validation_shards:
+  - "pipe:cat /home/replaci/Documents/ComputerVision/Dataset/NaveenData/TOY_SET/shard-000000.tar"
+
+batch_size: 2
+learning_rate: 3e-5
+optimizer: AdamW
+num_steps: [1, 4]
+log_interval: 1
+resume_from_checkpoint: false
+max_epochs: 1
+max_steps: 10
+save_interval: 100
+save_ckpt_path: ./checkpoints_toy
+source_key: masked_image
+target_key: target
+mask_key: mask
