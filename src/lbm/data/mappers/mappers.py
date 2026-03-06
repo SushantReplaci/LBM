@@ -1,6 +1,7 @@
 from typing import Any, Dict
 
 from torchvision import transforms
+from PIL import Image
 
 from .base import BaseMapper
 from .mappers_config import (
@@ -177,7 +178,7 @@ class ResolutionBucketMapper(BaseMapper):
         
         # Get current aspect ratio from image (assuming PIL or Tensor)
         image = batch[self.key]
-        if hasattr(image, "size"): # PIL
+        if isinstance(image, Image.Image): # PIL
             w_orig, h_orig = image.size
         else: # Tensor BHWC or CHW
             h_orig, w_orig = image.shape[-2:]
@@ -210,7 +211,7 @@ class ResolutionResizeMapper(BaseMapper):
         target_size = (batch["target_h"], batch["target_w"])
         
         image = batch[self.key]
-        if hasattr(image, "resize"): # PIL
+        if isinstance(image, Image.Image): # PIL
             batch[self.output_key] = image.resize((target_size[1], target_size[0]), resample=self._get_pil_resample())
         elif isinstance(image, torch.Tensor): # Tensor
             # F.interpolate expects (N, C, H, W)

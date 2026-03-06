@@ -58,6 +58,7 @@ class AutoencoderKLDiffusers(BaseModel):
         self.downsampling_factor = int(x.shape[2] / z.shape[2])
 
     def encode(self, x: torch.tensor, batch_size: int = 8):
+        x = x.to(self.dtype)
         latents = []
         for i in range(0, x.shape[0], batch_size):
             latents.append(
@@ -131,6 +132,7 @@ class AutoencoderKLDiffusers(BaseModel):
             samples = torch.cat(samples, dim=0)
 
         else:
+            z = z.to(self.dtype)
             samples = self.vae_model.decode(z).sample
 
         return samples
