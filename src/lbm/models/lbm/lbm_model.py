@@ -518,7 +518,7 @@ class LBMModel(BaseModel):
         """
         # 1. Get Latents (z0: target, z1: source)
         if self.vae is not None:
-            z0 = self.vae.encode(batch[self.target_key])
+            z0 = self.vae.encode(batch[self.target_key].to(self.dtype))
             
             source_image = batch[self.source_key]
             source_image = torch.nn.functional.interpolate(

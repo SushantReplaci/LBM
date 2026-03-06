@@ -1,5 +1,5 @@
 # wandb
-wandb_project: lbm-removal-toy
+wandb_project: lbm-removal-toy-vast-test-new-2
 timestep_sampling: custom_timesteps
 unet_input_channels: 10
 vae_num_channels: 4
@@ -17,21 +17,21 @@ use_bucketing: true
 # SHARDS_PATH_OR_URLS
 # Using the toy set created by the user
 train_shards:
-  - "pipe:cat /home/ubuntu/Documents/LBM/data/toy_data_lbm/shard-*.tar"
+  - "pipe:cat /workspace/LBM/data/toy_data/shard-000000.tar"
 
 validation_shards:
-  - "pipe:cat /home/ubuntu/Documents/LBM/data/toy_data_lbm/shard-000000.tar"
+  - "pipe:cat /workspace/LBM/data/toy_data/shard-000000.tar"
 
 batch_size: 1
 learning_rate: 3e-5
 optimizer: AdamW
 num_steps: [1, 4]
-log_interval: 1
+log_interval: 50
 resume_from_checkpoint: false
-max_epochs: 1
-max_steps: 10
+max_epochs: 20
+max_steps: 2000
 save_interval: 100
-save_ckpt_path: ./checkpoints_toy
+save_ckpt_path: ./checkpoints_toy2
 source_key: masked_image
 target_key: target
 mask_key: mask

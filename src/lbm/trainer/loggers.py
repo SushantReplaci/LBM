@@ -114,7 +114,7 @@ class WandbSampleLogger(Callback):
         batch_idx: int,
     ) -> None:
         self.log_samples(trainer, pl_module, outputs, batch, batch_idx, split="train")
-        self._process_logs(trainer, outputs, split="train")
+        # self._process_logs(trainer, outputs, split="train") # Disable redundant scalar logging
 
     def on_validation_batch_end(
         self,
@@ -125,7 +125,7 @@ class WandbSampleLogger(Callback):
         batch_idx: int,
     ) -> None:
         self.log_samples(trainer, pl_module, outputs, batch, batch_idx, split="val")
-        self._process_logs(trainer, outputs, split="val")
+        # self._process_logs(trainer, outputs, split="val") # Disable redundant scalar logging
 
     @rank_zero_only
     @torch.no_grad()
@@ -175,11 +175,11 @@ class WandbSampleLogger(Callback):
                     )
 
                 # Scalar tensor
-                if value.dim() == 1 or value.dim() == 0:
-                    value = value.float().numpy()
-                    trainer.logger.experiment.log(
-                        {f"{key}/{split}": value}, step=trainer.global_step
-                    )
+                # if value.dim() == 1 or value.dim() == 0:
+                #     value = value.float().numpy()
+                #     trainer.logger.experiment.log(
+                #         {f"{key}/{split}": value}, step=trainer.global_step
+                #     )
 
             # list of string (e.g. text)
             if isinstance(value, list):
@@ -205,12 +205,12 @@ class WandbSampleLogger(Callback):
                     {f"{key}/{split}": value}, step=trainer.global_step
                 )
 
-            if isinstance(value, np.ndarray):
-                if value.ndim == 1:
-                    trainer.logger.experiment.log(
-                        {f"{key}/{split}": wandb.Histogram(value)},
-                        step=trainer.global_step,
-                    )
+            # if isinstance(value, np.ndarray):
+            #     if value.ndim == 1:
+            #         trainer.logger.experiment.log(
+            #             {f"{key}/{split}": wandb.Histogram(value)},
+            #             step=trainer.global_step,
+            #         )
 
         return logs
 

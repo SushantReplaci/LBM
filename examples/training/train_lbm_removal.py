@@ -128,7 +128,7 @@ class MaskingMapper(BaseMapper):
         batch[self.output_key] = image * (1.0 - mask) + noise * mask
         
         # Update mask in batch if needed (some models might use the augmented mask)
-        # batch[self.mask_key] = mask 
+        batch[self.mask_key] = mask 
         
         return batch
 
@@ -340,7 +340,7 @@ def get_model(
         training_noise_scheduler=training_noise_scheduler,
         sampling_noise_scheduler=sampling_noise_scheduler,
         vae=vae,
-        conditioner=conditioner,
+        conditioner=conditioner_wrapper,
     ).to(torch.bfloat16)
 
     return model
@@ -382,12 +382,17 @@ def get_filter_mappers(use_bucketing: bool = False):
         )
         # Convert to Tensors
         for key in ["image", "target", "mask"]:
+            t_list = ["ToTensor"]
+            t_kwargs = [{}]
+            if key == "mask":
+                t_list.insert(0, "Grayscale")
+                t_kwargs.insert(0, {"num_output_channels": 1})
             mappers.append(
                 TorchvisionMapper(
                     TorchvisionMapperConfig(
                         key=key,
-                        transforms=["ToTensor"],
-                        transforms_kwargs=[{}],
+                        transforms=t_list,
+                        transforms_kwargs=t_kwargs,
                     )
                 )
             )
@@ -395,15 +400,21 @@ def get_filter_mappers(use_bucketing: bool = False):
     else:
         # Fixed 1024x1024
         for key, interp in [("image", InterpolationMode.BILINEAR), ("target", InterpolationMode.BILINEAR), ("mask", InterpolationMode.NEAREST_EXACT)]:
+            t_list = ["ToTensor", "Resize"]
+            t_kwargs = [
+                {},
+                {"size": (1024, 1024), "interpolation": interp},
+            ]
+            if key == "mask":
+                t_list.insert(0, "Grayscale")
+                t_kwargs.insert(0, {"num_output_channels": 1})
+                
             mappers.append(
                 TorchvisionMapper(
                     TorchvisionMapperConfig(
                         key=key,
-                        transforms=["ToTensor", "Resize"],
-                        transforms_kwargs=[
-                            {},
-                            {"size": (1024, 1024), "interpolation": interp},
-                        ],
+                        transforms=t_list,
+                        transforms_kwargs=t_kwargs,
                     )
                 )
             )
@@ -538,6 +549,7 @@ def main(
     use_bucketing: bool = False,
     mixing_probabilities: Optional[List[float]] = None,
 ):
+    torch.set_float32_matmul_precision("high")
     model = get_model(
         backbone_signature=backbone_signature,
         vae_num_channels=vae_num_channels,

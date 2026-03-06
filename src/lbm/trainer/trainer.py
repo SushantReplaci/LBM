@@ -162,6 +162,11 @@ class TrainingPipeline(pl.LightningModule):
     def training_step(self, train_batch: Dict[str, Any], batch_idx: int) -> dict:
         model_output = self.model(train_batch)
         loss = model_output["loss"]
+
+        self.log("train/loss", loss, prog_bar=True, on_step=True, on_epoch=True)
+        self.log("train/latent_recon_loss", model_output["latent_recon_loss"], on_step=True, on_epoch=True)
+        self.log("train/pixel_recon_loss", model_output["pixel_recon_loss"], on_step=True, on_epoch=True)
+
         logging.info(f"loss: {loss}")
         return {
             "loss": loss,
@@ -169,7 +174,12 @@ class TrainingPipeline(pl.LightningModule):
         }
 
     def validation_step(self, val_batch: Dict[str, Any], val_idx: int) -> dict:
-        loss = self.model(val_batch, device=self.device)["loss"]
+        model_output = self.model(val_batch, device=self.device)
+        loss = model_output["loss"]
+
+        self.log("val/loss", loss, on_step=False, on_epoch=True)
+        self.log("val/latent_recon_loss", model_output["latent_recon_loss"], on_step=False, on_epoch=True)
+        self.log("val/pixel_recon_loss", model_output["pixel_recon_loss"], on_step=False, on_epoch=True)
 
         metrics = self.model.compute_metrics(val_batch)
 
