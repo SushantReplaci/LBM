@@ -196,4 +196,11 @@ class TrainingPipeline(pl.LightningModule):
                     else:
                         logs[key] = batch[key]
 
+        # Log bridge distribution if available
+        if hasattr(self.model, "compute_bridge_distribution"):
+            dist_N = min(N, 4) if N > 0 else 1 # Limit batch size for distribution computation
+            dist_batch = {k: v[:dist_N] for k, v in batch.items()}
+            dist_logs = self.model.compute_bridge_distribution(dist_batch)
+            logs.update(dist_logs)
+
         return logs
