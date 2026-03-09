@@ -205,12 +205,12 @@ class WandbSampleLogger(Callback):
                     {f"{key}/{split}": value}, step=trainer.global_step
                 )
 
-            # if isinstance(value, np.ndarray):
-            #     if value.ndim == 1:
-            #         trainer.logger.experiment.log(
-            #             {f"{key}/{split}": wandb.Histogram(value)},
-            #             step=trainer.global_step,
-            #         )
+            if isinstance(value, np.ndarray):
+                if value.ndim == 1:
+                    trainer.logger.experiment.log(
+                        {f"{key}/{split}": wandb.Histogram(value)},
+                        step=trainer.global_step,
+                    )
 
         return logs
 
