@@ -123,9 +123,10 @@ class MaskingMapper(BaseMapper):
         mask = torch.from_numpy(mask_np).to(image.device).unsqueeze(0).float()
         
         # Injection
-        # image is assumed already normalized to [-1, 1]
-        noise = torch.randn_like(image)
-        batch[self.output_key] = image * (1.0 - mask) + noise * mask
+        # image already in [-1,1]
+        noise = torch.rand_like(image) * 2 - 1   # uniform random pixels
+        masked_image = image * (1.0 - mask) + noise * mask
+        batch[self.output_key] = masked_image
         
         # Update mask in batch if needed (some models might use the augmented mask)
         batch[self.mask_key] = mask 
