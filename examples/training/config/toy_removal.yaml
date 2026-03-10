@@ -8,6 +8,7 @@ prob: [0.25, 0.25, 0.25, 0.25]
 pixel_loss_type: lpips # l1 l2
 pixel_loss_weight: 10.0
 latent_loss_type: l2 # l1 l2
+use_mask_for_loss: false
 latent_loss_weight: 1.0
 bridge_noise_sigma: 0.05
 conditioning_images_keys: ["image"]
@@ -22,7 +23,7 @@ train_shards:
 validation_shards:
   - "pipe:cat /workspace/LBM/data/toy_data/shard-000000.tar"
 
-batch_size: 1
+batch_size: 4
 learning_rate: 3e-5
 optimizer: AdamW
 num_steps: [1, 4]
