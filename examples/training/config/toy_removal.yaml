@@ -1,5 +1,5 @@
 # wandb
-wandb_project: lbm-removal-toy-vast-test-new-2
+wandb_project: lbm-removal-toy-vast-test-new-3
 timestep_sampling: custom_timesteps
 unet_input_channels: 10
 vae_num_channels: 4
@@ -8,7 +8,6 @@ prob: [0.25, 0.25, 0.25, 0.25]
 pixel_loss_type: lpips # l1 l2
 pixel_loss_weight: 10.0
 latent_loss_type: l2 # l1 l2
-use_mask_for_loss: false
 latent_loss_weight: 1.0
 bridge_noise_sigma: 0.05
 conditioning_images_keys: ["image"]
@@ -32,7 +31,7 @@ resume_from_checkpoint: false
 max_epochs: 20
 max_steps: 2000
 save_interval: 100
-save_ckpt_path: ./checkpoints_toy2
+save_ckpt_path: ./checkpoints_toy
 source_key: masked_image
 target_key: target
 mask_key: mask
