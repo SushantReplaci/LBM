@@ -74,6 +74,7 @@ class LBMModel(BaseModel):
         self.source_key = config.source_key
         self.target_key = config.target_key
         self.mask_key = config.mask_key
+        self.use_mask_for_loss = config.use_mask_for_loss
         self.bridge_noise_sigma = config.bridge_noise_sigma
 
         self.num_iterations = nn.Parameter(
@@ -106,7 +107,7 @@ class LBMModel(BaseModel):
             z = batch[self.target_key]
             downsampling_factor = 1
 
-        if self.mask_key in batch:
+        if self.mask_key in batch and self.use_mask_for_loss:
             valid_mask = batch[self.mask_key].bool()[:, 0, :, :].unsqueeze(1)
             invalid_mask = ~valid_mask
             valid_mask_for_latent = ~torch.max_pool2d(
