@@ -134,42 +134,7 @@ class MaskingMapper(BaseMapper):
         return batch
 
 
-class EdgeMapper(BaseMapper):
-    """
-    Mapper that generates an edge map using Canny edge detection.
-    """
-    def __init__(self, config: BaseMapperConfig, image_key: str = "image", output_key: str = "edge", low_threshold: int = 100, high_threshold: int = 200):
-        super().__init__(config)
-        self.image_key = image_key
-        self.output_key = output_key
-        self.low_threshold = low_threshold
-        self.high_threshold = high_threshold
 
-    def __call__(self, batch: dict, *args, **kwargs) -> dict:
-        image = batch[self.image_key] # (C, H, W) Tensor or (H, W, C) ndarray
-        
-        if isinstance(image, torch.Tensor):
-            # Convert to numpy (H, W, C)
-            img_np = image.permute(1, 2, 0).cpu().numpy()
-            # Rescale if needed (assuming [-1, 1] or [0, 1])
-            if img_np.min() < 0:
-                img_np = (img_np + 1.0) / 2.0
-            img_np = (img_np * 255).astype(np.uint8)
-        else:
-            img_np = np.array(image).astype(np.uint8)
-
-        if img_np.shape[-1] == 3:
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-        else:
-            gray = img_np
-
-        edges = cv2.Canny(gray, self.low_threshold, self.high_threshold)
-        
-        # Convert back to tensor (1, H, W) [0, 1]
-        edges_tensor = torch.from_numpy(edges).unsqueeze(0).float() / 255.0
-        batch[self.output_key] = edges_tensor
-        
-        return batch
 
 
 def get_model(
@@ -355,6 +320,7 @@ def get_filter_mappers(use_bucketing: bool = False):
                     "original.jpg": "image",
                     "target.png": "target",
                     "mask.png": "mask",
+                    "edge_map.png": "edge",
                 }
             )
         )
@@ -381,11 +347,16 @@ def get_filter_mappers(use_bucketing: bool = False):
                 ResolutionResizeMapperConfig(key="mask", output_key="mask", interpolation="nearest")
             )
         )
+        mappers.append(
+            ResolutionResizeMapper(
+                ResolutionResizeMapperConfig(key="edge", output_key="edge", interpolation="nearest")
+            )
+        )
         # Convert to Tensors
-        for key in ["image", "target", "mask"]:
+        for key in ["image", "target", "mask", "edge"]:
             t_list = ["ToTensor"]
             t_kwargs = [{}]
-            if key == "mask":
+            if key == "mask" or key == "edge":
                 t_list.insert(0, "Grayscale")
                 t_kwargs.insert(0, {"num_output_channels": 1})
             mappers.append(
@@ -400,13 +371,18 @@ def get_filter_mappers(use_bucketing: bool = False):
 
     else:
         # Fixed 1024x1024
-        for key, interp in [("image", InterpolationMode.BILINEAR), ("target", InterpolationMode.BILINEAR), ("mask", InterpolationMode.NEAREST_EXACT)]:
+        for key, interp in [
+            ("image", InterpolationMode.BILINEAR), 
+            ("target", InterpolationMode.BILINEAR), 
+            ("mask", InterpolationMode.NEAREST_EXACT),
+            ("edge", InterpolationMode.NEAREST_EXACT)
+        ]:
             t_list = ["ToTensor", "Resize"]
             t_kwargs = [
                 {},
                 {"size": (1024, 1024), "interpolation": interp},
             ]
-            if key == "mask":
+            if key == "mask" or key == "edge":
                 t_list.insert(0, "Grayscale")
                 t_kwargs.insert(0, {"num_output_channels": 1})
                 
@@ -419,9 +395,6 @@ def get_filter_mappers(use_bucketing: bool = False):
                     )
                 )
             )
-
-    # Generate Edges (runs for BOTH modes, handles both [0, 1] and [-1, 1] safely)
-    mappers.append(EdgeMapper(BaseMapperConfig()))
 
     # Rescale to [-1, 1] before creating masked image
     mappers.append(RescaleMapper(RescaleMapperConfig(key="image")))
@@ -437,7 +410,7 @@ def get_filter_mappers(use_bucketing: bool = False):
     # masked_image is now already [-1, 1] because it was created from [-1, 1] image + N(0, 1) noise
 
     filters_mappers = [
-        KeyFilter(KeyFilterConfig(keys=["original.jpg", "target.png", "mask.png"])),
+        KeyFilter(KeyFilterConfig(keys=["original.jpg", "target.png", "mask.png", "edge_map.png"])),
         MapperWrapper(mappers),
     ]
 
