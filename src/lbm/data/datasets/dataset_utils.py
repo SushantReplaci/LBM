@@ -1,4 +1,5 @@
 from typing import Dict, List, Any, Optional
+import logging
 import torch
 import numpy as np
 from .collation_fn import custom_collation_fn
@@ -17,6 +18,7 @@ class BucketBatcher:
         self.collation_fn = collation_fn
         self.default_batch_size = default_batch_size
         self.buckets = {}
+        logging.info(f"BucketBatcher initialized with {len(resolution_to_batch_size)} buckets.")
 
     def __call__(self, data):
         for sample in data:
@@ -30,6 +32,7 @@ class BucketBatcher:
             
             if len(self.buckets[bucket_key]) >= batch_size:
                 batch = self.buckets.pop(bucket_key)
+                logging.info(f"Yielding batch for bucket {bucket_key} (size: {len(batch)})")
                 yield self.collation_fn(batch)
 
 def get_resolution_to_batch_size_map(budgets, base_batch_sizes):

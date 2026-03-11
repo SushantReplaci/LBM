@@ -114,7 +114,7 @@ class WandbSampleLogger(Callback):
         batch_idx: int,
     ) -> None:
         self.log_samples(trainer, pl_module, outputs, batch, batch_idx, split="train")
-        self._process_logs(trainer, outputs, split="train")
+        # self._process_logs(trainer, outputs, split="train") # Disable redundant scalar logging
 
     def on_validation_batch_end(
         self,
@@ -125,7 +125,7 @@ class WandbSampleLogger(Callback):
         batch_idx: int,
     ) -> None:
         self.log_samples(trainer, pl_module, outputs, batch, batch_idx, split="val")
-        self._process_logs(trainer, outputs, split="val")
+        # self._process_logs(trainer, outputs, split="val") # Disable redundant scalar logging
 
     @rank_zero_only
     @torch.no_grad()
@@ -158,7 +158,76 @@ class WandbSampleLogger(Callback):
     def _process_logs(
         self, trainer, logs: Dict[str, Any], rescale=True, split="train"
     ) -> Dict[str, Any]:
-        for key, value in logs.items():
+        # --- 1. COMBINE SPECIAL MEDIA KEYS INTO A SINGLE GRID ---
+        desired_order = ["masked_image", "mask", "edge", "target"]
+        sample_keys = sorted([k for k in logs.keys() if k.startswith("samples_")])
+        combined_candidates = desired_order + sample_keys
+        
+        to_combine = [k for k in combined_candidates if k in logs and isinstance(logs[k], torch.Tensor) and logs[k].dim() == 4]
+        
+        if to_combine:
+            try:
+                first_img = logs[to_combine[0]]
+                n_samples = first_img.shape[0]
+                img_h, img_w = first_img.shape[2], first_img.shape[3]
+                padding = 2
+                
+                pretty_names = {
+                    "masked_image": "Input",
+                    "target": "Target",
+                    "mask": "Mask",
+                    "edge": "Edge"
+                }
+
+                interleaved_images = []
+                for i in range(n_samples):
+                    for k in to_combine:
+                        img = logs[k][i].detach().cpu().float()
+                        # Rescale images in [-1, 1] to [0, 1]. Mask/Edge stay [0, 1].
+                        if k in ["masked_image", "target"] or k.startswith("samples_") or "image" in k:
+                            img = (img + 1.0) / 2.0
+                        
+                        if img.shape[0] == 1:
+                            img = img.repeat(3, 1, 1)
+                        elif img.shape[0] > 3:
+                            img = img[:3]
+                        
+                        interleaved_images.append(img.clamp(0, 1))
+
+                # Create the image grid
+                n_cols = len(to_combine)
+                grid = make_grid(torch.stack(interleaved_images), nrow=n_cols, padding=padding)
+                grid_np = grid.permute(1, 2, 0).mul(255).clamp(0, 255).byte().numpy()
+                grid_pil = Image.fromarray(grid_np)
+
+                # Create header row with labels
+                header_labels = [pretty_names.get(k, k.replace("samples_", "Pred ").replace("_steps", "")) for k in to_combine]
+                label_h = 40
+                combined_pil = Image.new("RGB", (grid_pil.width, grid_pil.height + label_h), color="white")
+                
+                # Paste labels aligned with columns
+                for idx, label in enumerate(header_labels):
+                    cell_label = create_grid_texts([label], n_cols=1, image_size=(img_w, label_h), font_size=20)
+                    x_pos = padding + idx * (img_w + padding)
+                    combined_pil.paste(cell_label, (x_pos, 0))
+                
+                # Paste the grid below labels
+                combined_pil.paste(grid_pil, (0, label_h))
+
+                trainer.logger.experiment.log(
+                    {f"combined_samples/{split}": [wandb.Image(combined_pil)]},
+                    step=trainer.global_step,
+                )
+                
+                # Remove from logs so they aren't processed individually below
+                for k in to_combine:
+                    del logs[k]
+                    
+            except Exception as e:
+                logging.error(f"Failed to create combined WandB image: {e}")
+
+        # --- 2. PROCESS REMAINING LOGS INDIVIDUALLY ---
+        for key, value in list(logs.items()):
             if isinstance(value, torch.Tensor):
                 value = value.detach().cpu()
                 if value.dim() == 4:
@@ -174,16 +243,9 @@ class WandbSampleLogger(Callback):
                         step=trainer.global_step,
                     )
 
-                # Scalar tensor
-                if value.dim() == 1 or value.dim() == 0:
-                    value = value.float().numpy()
-                    trainer.logger.experiment.log(
-                        {f"{key}/{split}": value}, step=trainer.global_step
-                    )
-
             # list of string (e.g. text)
             if isinstance(value, list):
-                if isinstance(value[0], str):
+                if value and isinstance(value[0], str):
                     pil_image_texts = create_grid_texts(value)
                     wandb_image = wandb.Image(pil_image_texts)
                     trainer.logger.experiment.log(
@@ -200,10 +262,17 @@ class WandbSampleLogger(Callback):
                     {f"{key}/{split}": value}, step=trainer.global_step
                 )
 
-            if isinstance(value, int) or isinstance(value, float):
+            if isinstance(value, (int, float)):
                 trainer.logger.experiment.log(
                     {f"{key}/{split}": value}, step=trainer.global_step
                 )
+
+            if isinstance(value, np.ndarray):
+                if value.ndim == 1:
+                    trainer.logger.experiment.log(
+                        {f"{key}/{split}": wandb.Histogram(value)},
+                        step=trainer.global_step,
+                    )
 
         return logs
 

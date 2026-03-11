@@ -1,7 +1,7 @@
 # wandb
-wandb_project: lbm-removal-toy
+wandb_project: lbm-removal-toy-vast-test-new-3
 timestep_sampling: custom_timesteps
-unet_input_channels: 4
+unet_input_channels: 10
 vae_num_channels: 4
 selected_timesteps: [0, 250, 500, 750]
 prob: [0.25, 0.25, 0.25, 0.25]
@@ -10,26 +10,26 @@ pixel_loss_weight: 10.0
 latent_loss_type: l2 # l1 l2
 latent_loss_weight: 1.0
 bridge_noise_sigma: 0.05
-conditioning_images_keys: []
-conditioning_masks_keys: []
+conditioning_images_keys: ["image"]
+conditioning_masks_keys: ["edge", "mask"]
 use_bucketing: true
 
 # SHARDS_PATH_OR_URLS
 # Using the toy set created by the user
 train_shards:
-  - "pipe:cat /home/ubuntu/Documents/LBM/data/toy_data_lbm/shard-*.tar"
+  - "pipe:cat /workspace/LBM/data/toy_data/shard-000000.tar"
 
 validation_shards:
-  - "pipe:cat /home/ubuntu/Documents/LBM/data/toy_data_lbm/shard-000000.tar"
+  - "pipe:cat /workspace/LBM/data/toy_data/shard-000000.tar"
 
-batch_size: 1
+batch_size: 4
 learning_rate: 3e-5
 optimizer: AdamW
 num_steps: [1, 4]
-log_interval: 1
+log_interval: 50
 resume_from_checkpoint: false
-max_epochs: 1
-max_steps: 10
+max_epochs: 20
+max_steps: 2000
 save_interval: 100
 save_ckpt_path: ./checkpoints_toy
 source_key: masked_image

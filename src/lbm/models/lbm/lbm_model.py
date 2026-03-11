@@ -74,6 +74,7 @@ class LBMModel(BaseModel):
         self.source_key = config.source_key
         self.target_key = config.target_key
         self.mask_key = config.mask_key
+        self.use_mask_for_loss = config.use_mask_for_loss
         self.bridge_noise_sigma = config.bridge_noise_sigma
 
         self.num_iterations = nn.Parameter(
@@ -106,7 +107,7 @@ class LBMModel(BaseModel):
             z = batch[self.target_key]
             downsampling_factor = 1
 
-        if self.mask_key in batch:
+        if self.mask_key in batch and self.use_mask_for_loss:
             valid_mask = batch[self.mask_key].bool()[:, 0, :, :].unsqueeze(1)
             invalid_mask = ~valid_mask
             valid_mask_for_latent = ~torch.max_pool2d(
@@ -509,3 +510,74 @@ class LBMModel(BaseModel):
                 )
 
         return logs
+
+    @torch.no_grad()
+    def compute_bridge_distribution(self, batch: Dict[str, Any], timesteps: List[float] = [0.25, 0.5, 0.75]):
+        """
+        Computes the distribution of latents at specific timesteps within the masked region.
+        This is used for verifying the bridge matching process.
+        """
+        # 1. Get Latents (z0: target, z1: source)
+        if self.vae is not None:
+            z0 = self.vae.encode(batch[self.target_key].to(self.dtype))
+            
+            source_image = batch[self.source_key]
+            source_image = torch.nn.functional.interpolate(
+                source_image,
+                size=batch[self.target_key].shape[-2:],
+                mode="bilinear",
+                align_corners=False,
+            ).to(z0.dtype)
+            z1 = self.vae.encode(source_image)
+            downsampling_factor = self.vae.downsampling_factor
+        else:
+            z0 = batch[self.target_key]
+            z1 = batch[self.source_key]
+            downsampling_factor = 1
+
+        # 2. Get Mask (downsampled to latent size)
+        if self.mask_key in batch:
+            mask = batch[self.mask_key] # (B, 1, H, W)
+            mask_latent = torch.max_pool2d(
+                mask.float(),
+                downsampling_factor,
+                downsampling_factor,
+            ) # (B, 1, h, w)
+            mask_latent = mask_latent.bool()
+        else:
+            mask_latent = torch.ones((z0.shape[0], 1, z0.shape[2], z0.shape[3]), device=z0.device, dtype=torch.bool)
+
+        results = {}
+        
+        # 3. For each timestep, compute zt
+        for t_val in timesteps:
+            # Create a singleton tensor for timestep
+            t = torch.tensor([t_val], device=z0.device).repeat(z0.shape[0])
+            
+            # Map float t [0, 1] to scheduler timesteps if needed, or use directly if bridge is linear
+            # In LBMModel forward: sigmas = 1 - t/1000? 
+            # Looking at _get_sigmas, it maps scheduler timesteps to sigmas.
+            # For visualization, we can just use the interpolation factor directly.
+            # LBM Bridge: noisy_sample = sigmas * z_source + (1.0 - sigmas) * z + bridge_noise
+            # Here t=1 is source, t=0 is target.
+            
+            # Use same logic as forward but for fixed t
+            sigmas = t.view(-1, 1, 1, 1) # Interpolation factor
+            
+            noise = torch.randn_like(z0)
+            zt = (
+                sigmas * z1
+                + (1.0 - sigmas) * z0
+                + self.bridge_noise_sigma
+                * (sigmas * (1.0 - sigmas)) ** 0.5
+                * noise
+            )
+            
+            # Extract values ONLY inside the masked area for all channels
+            # mask_latent is (B, 1, h, w), zt is (B, C, h, w)
+            masked_zt = zt[mask_latent.expand_as(zt)]
+            
+            if masked_zt.numel() > 0:
+                results[f"latent_dist_t_{t_val:.2f}"] = masked_zt.float().cpu().numpy()
+            
+        return results

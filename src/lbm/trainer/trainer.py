@@ -162,6 +162,11 @@ class TrainingPipeline(pl.LightningModule):
     def training_step(self, train_batch: Dict[str, Any], batch_idx: int) -> dict:
         model_output = self.model(train_batch)
         loss = model_output["loss"]
+
+        self.log("train/loss", loss, prog_bar=True, on_step=True, on_epoch=True)
+        self.log("train/latent_recon_loss", model_output["latent_recon_loss"], on_step=True, on_epoch=True)
+        self.log("train/pixel_recon_loss", model_output["pixel_recon_loss"], on_step=True, on_epoch=True)
+
         logging.info(f"loss: {loss}")
         return {
             "loss": loss,
@@ -169,7 +174,12 @@ class TrainingPipeline(pl.LightningModule):
         }
 
     def validation_step(self, val_batch: Dict[str, Any], val_idx: int) -> dict:
-        loss = self.model(val_batch, device=self.device)["loss"]
+        model_output = self.model(val_batch, device=self.device)
+        loss = model_output["loss"]
+
+        self.log("val/loss", loss, on_step=False, on_epoch=True)
+        self.log("val/latent_recon_loss", model_output["latent_recon_loss"], on_step=False, on_epoch=True)
+        self.log("val/pixel_recon_loss", model_output["pixel_recon_loss"], on_step=False, on_epoch=True)
 
         metrics = self.model.compute_metrics(val_batch)
 
@@ -195,5 +205,12 @@ class TrainingPipeline(pl.LightningModule):
                         logs[key] = batch[key][:N]
                     else:
                         logs[key] = batch[key]
+
+        # Log bridge distribution if available
+        if hasattr(self.model, "compute_bridge_distribution"):
+            dist_N = min(N, 4) if N > 0 else 1 # Limit batch size for distribution computation
+            dist_batch = {k: v[:dist_N] for k, v in batch.items()}
+            dist_logs = self.model.compute_bridge_distribution(dist_batch)
+            logs.update(dist_logs)
 
         return logs
