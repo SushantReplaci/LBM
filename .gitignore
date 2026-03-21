@@ -8,3 +8,5 @@ examples/inference/examples/*
 envs/*
 checkpoints/*
 *.sh
+data/*
+checkpoints_toy/*
