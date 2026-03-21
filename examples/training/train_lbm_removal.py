@@ -110,9 +110,12 @@ class MaskingMapper(BaseMapper):
             # This forces the model to recover original pixels too
             h, w = mask_np.shape
             aug = A.CoarseDropout(
-                num_holes_range=(1, 8), 
-                hole_height_range=(1, self.config.dropout_hole_size), 
-                hole_width_range=(1, self.config.dropout_hole_size),
+                min_holes=1,
+                max_holes=8, 
+                min_height=1,
+                max_height=self.config.dropout_hole_size, 
+                min_width=1,
+                max_width=self.config.dropout_hole_size,
                 p=1.0
             )
             # Apply only to mask where it is 1

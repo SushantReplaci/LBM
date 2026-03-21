@@ -17,10 +17,10 @@ use_bucketing: true
 # SHARDS_PATH_OR_URLS
 # Using the toy set created by the user
 train_shards:
-  - "pipe:cat /workspace/LBM/data/toy_data/shard-000000.tar"
+  - "pipe:cat data/toy_data/train/shard-*.tar"
 
 validation_shards:
-  - "pipe:cat /workspace/LBM/data/toy_data/shard-000000.tar"
+  - "pipe:cat data/toy_data/val/shard-000000.tar"
 
 batch_size: 4
 learning_rate: 3e-5

@@ -1,5 +1,5 @@
 # wandb
-wandb_project: lbm-removal
+wandb_project: lbm-removal-toy-edge-test
 timestep_sampling: custom_timesteps
 unet_input_channels: 4
 vae_num_channels: 4
@@ -10,27 +10,27 @@ pixel_loss_weight: 10.0
 latent_loss_type: l2 # l1 l2
 latent_loss_weight: 1.0
 bridge_noise_sigma: 0.05
-conditioning_images_keys: []
-conditioning_masks_keys: []
-use_bucketing: false
+conditioning_images_keys: ["image"]
+conditioning_masks_keys: ["edge", "mask"]
+use_bucketing: true
 
 # SHARDS_PATH_OR_URLS
 train_shards:
-  - pipe:cat PATH_TO_TRAIN_TARS
+  - pipe:cat data/toy_data/train/*.tar
 
 validation_shards:
-  - pipe:cat PATH_TO_VAL_TARS
+  - pipe:cat data/toy_data/val/*.tar
 
-batch_size: 4
+batch_size: 1
 learning_rate: 3e-5
 optimizer: AdamW
 num_steps: [1, 4]
-log_interval: 500
-resume_from_checkpoint: true
-max_epochs: 50
-max_steps: 20000
-save_interval: 5000
-save_ckpt_path: ./checkpoints_removal
+log_interval: 1
+resume_from_checkpoint: false
+max_epochs: 20
+max_steps: 1000000
+save_interval: 100
+save_ckpt_path: ./checkpoints_toy
 source_key: masked_image
 target_key: target
 mask_key: mask
