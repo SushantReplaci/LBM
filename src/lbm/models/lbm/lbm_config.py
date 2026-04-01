@@ -70,6 +70,7 @@ class LBMConfig(ModelConfig):
     source_key: str = "source_image"
     target_key: str = "target_image"
     mask_key: Optional[str] = None
+    use_mask_for_loss: bool = False
     latent_loss_weight: float = 1.0
     latent_loss_type: Literal["l2", "l1"] = "l2"
     pixel_loss_type: Literal["l2", "l1", "lpips"] = "l2"

@@ -1,3 +1,5 @@
+#TODO: Add Distribution plot for each timestep, Conditionning edge maps and original rgb images
+  
 import datetime
 import logging
 import os
@@ -108,9 +110,12 @@ class MaskingMapper(BaseMapper):
             # This forces the model to recover original pixels too
             h, w = mask_np.shape
             aug = A.CoarseDropout(
-                num_holes_range=(1, 8), 
-                hole_height_range=(1, self.config.dropout_hole_size), 
-                hole_width_range=(1, self.config.dropout_hole_size),
+                min_holes=1,
+                max_holes=8, 
+                min_height=1,
+                max_height=self.config.dropout_hole_size, 
+                min_width=1,
+                max_width=self.config.dropout_hole_size,
                 p=1.0
             )
             # Apply only to mask where it is 1
@@ -121,13 +126,18 @@ class MaskingMapper(BaseMapper):
         mask = torch.from_numpy(mask_np).to(image.device).unsqueeze(0).float()
         
         # Injection
-        noise = torch.rand_like(image)
-        batch[self.output_key] = image * (1.0 - mask) + noise * mask
+        # image already in [-1,1]
+        noise = torch.rand_like(image) * 2 - 1   # uniform random pixels
+        masked_image = image * (1.0 - mask) + noise * mask
+        batch[self.output_key] = masked_image
         
         # Update mask in batch if needed (some models might use the augmented mask)
-        # batch[self.mask_key] = mask 
+        batch[self.mask_key] = mask 
         
         return batch
+
+
+
 
 
 def get_model(
@@ -241,22 +251,18 @@ def get_model(
     del pipe
 
 
-    #concat edge maps and original image here later
-
-    if conditioning_images_keys != [] or conditioning_masks_keys != []:
-
-        latents_concat_embedder_config = LatentsConcatEmbedderConfig(
-            image_keys=conditioning_images_keys,
-            mask_keys=conditioning_masks_keys,
+    # Build the LatentsConcatEmbedder if needed
+    if conditioning_images_keys or conditioning_masks_keys:
+        # Concat original image + edge map + mask
+        concat_config = LatentsConcatEmbedderConfig(
+            image_keys=conditioning_images_keys if conditioning_images_keys else ["image"],
+            mask_keys=conditioning_masks_keys if conditioning_masks_keys else ["edge", "mask"],
         )
-        latent_concat_embedder = LatentsConcatEmbedder(latents_concat_embedder_config)
-        latent_concat_embedder.freeze()
-        conditioners.append(latent_concat_embedder)
+        conditioner = LatentsConcatEmbedder(concat_config)
+        conditioner.freeze() # Important to freeze
+        conditioners.append(conditioner)
 
-    # Wrap conditioners and set to device
-    conditioner = ConditionerWrapper(
-        conditioners=conditioners,
-    )
+    conditioner_wrapper = ConditionerWrapper(conditioners)
 
     ## VAE ##
     # Get VAE model
@@ -303,7 +309,7 @@ def get_model(
         training_noise_scheduler=training_noise_scheduler,
         sampling_noise_scheduler=sampling_noise_scheduler,
         vae=vae,
-        conditioner=conditioner,
+        conditioner=conditioner_wrapper,
     ).to(torch.bfloat16)
 
     return model
@@ -317,6 +323,7 @@ def get_filter_mappers(use_bucketing: bool = False):
                     "original.jpg": "image",
                     "target.png": "target",
                     "mask.png": "mask",
+                    "edge_map.png": "edge",
                 }
             )
         )
@@ -343,32 +350,58 @@ def get_filter_mappers(use_bucketing: bool = False):
                 ResolutionResizeMapperConfig(key="mask", output_key="mask", interpolation="nearest")
             )
         )
+        mappers.append(
+            ResolutionResizeMapper(
+                ResolutionResizeMapperConfig(key="edge", output_key="edge", interpolation="nearest")
+            )
+        )
         # Convert to Tensors
-        for key in ["image", "target", "mask"]:
+        for key in ["image", "target", "mask", "edge"]:
+            t_list = ["ToTensor"]
+            t_kwargs = [{}]
+            if key == "mask" or key == "edge":
+                t_list.insert(0, "Grayscale")
+                t_kwargs.insert(0, {"num_output_channels": 1})
             mappers.append(
                 TorchvisionMapper(
                     TorchvisionMapperConfig(
                         key=key,
-                        transforms=["ToTensor"],
-                        transforms_kwargs=[{}],
+                        transforms=t_list,
+                        transforms_kwargs=t_kwargs,
                     )
                 )
             )
+
     else:
         # Fixed 1024x1024
-        for key, interp in [("image", InterpolationMode.BILINEAR), ("target", InterpolationMode.BILINEAR), ("mask", InterpolationMode.NEAREST_EXACT)]:
+        for key, interp in [
+            ("image", InterpolationMode.BILINEAR), 
+            ("target", InterpolationMode.BILINEAR), 
+            ("mask", InterpolationMode.NEAREST_EXACT),
+            ("edge", InterpolationMode.NEAREST_EXACT)
+        ]:
+            t_list = ["ToTensor", "Resize"]
+            t_kwargs = [
+                {},
+                {"size": (1024, 1024), "interpolation": interp},
+            ]
+            if key == "mask" or key == "edge":
+                t_list.insert(0, "Grayscale")
+                t_kwargs.insert(0, {"num_output_channels": 1})
+                
             mappers.append(
                 TorchvisionMapper(
                     TorchvisionMapperConfig(
                         key=key,
-                        transforms=["ToTensor", "Resize"],
-                        transforms_kwargs=[
-                            {},
-                            {"size": (1024, 1024), "interpolation": interp},
-                        ],
+                        transforms=t_list,
+                        transforms_kwargs=t_kwargs,
                     )
                 )
             )
+
+    # Rescale to [-1, 1] before creating masked image
+    mappers.append(RescaleMapper(RescaleMapperConfig(key="image")))
+    mappers.append(RescaleMapper(RescaleMapperConfig(key="target")))
 
     mappers.append(
         MaskingMapper(
@@ -377,11 +410,10 @@ def get_filter_mappers(use_bucketing: bool = False):
             )
         )
     )
-    mappers.append(RescaleMapper(RescaleMapperConfig(key="target")))
-    mappers.append(RescaleMapper(RescaleMapperConfig(key="masked_image")))
+    # masked_image is now already [-1, 1] because it was created from [-1, 1] image + N(0, 1) noise
 
     filters_mappers = [
-        KeyFilter(KeyFilterConfig(keys=["original.jpg", "target.png", "mask.png"])),
+        KeyFilter(KeyFilterConfig(keys=["original.jpg", "target.png", "mask.png", "edge_map.png"])),
         MapperWrapper(mappers),
     ]
 
@@ -494,6 +526,7 @@ def main(
     use_bucketing: bool = False,
     mixing_probabilities: Optional[List[float]] = None,
 ):
+    torch.set_float32_matmul_precision("high")
     model = get_model(
         backbone_signature=backbone_signature,
         vae_num_channels=vae_num_channels,
@@ -530,7 +563,7 @@ def main(
         learning_rate=learning_rate,
         lr_scheduler_name=learning_rate_scheduler,
         lr_scheduler_kwargs=learning_rate_scheduler_kwargs,
-        log_keys=["masked_image", "target", "mask"],
+        log_keys=["masked_image", "target", "mask", "edge"],
         trainable_params=train_parameters,
         optimizer_name=optimizer,
         optimizer_kwargs=optimizer_kwargs,
